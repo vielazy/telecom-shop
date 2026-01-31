@@ -1,7 +1,7 @@
 const API_URL = "http://localhost:5000/api/cart";
 
 export const getMyCart = async (token) => {
-  const res = await fetch(`${API_URL}/my-cart`, {
+  const res = await fetch(`${API_URL}`, {
     headers: {
       Authorization: `Bearer ${token}`,
     },
@@ -38,5 +38,17 @@ export const clearCart = async (token) => {
       Authorization: `Bearer ${token}`,
     },
   });
+  return res.json();
+};
+export const updateQuantity = async (productId, quantity, token) => {
+  const res = await fetch(`${API_URL}/update`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ productId, quantity }),
+  });
+
   return res.json();
 };

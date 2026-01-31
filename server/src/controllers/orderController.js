@@ -3,44 +3,83 @@ import Cart from "../model/Cart.js";
 import Product from "../model/Product.js";
 
 export const createOrder = async (req, res) => {
-  const userId = req.user.id;
+  try {
+    const userId = req.user.id;
+    const { paymentMethod } = req.body;
 
-  const cart = await Cart.findOne({ userId });
-  if (!cart || cart.items.length === 0)
-    return res.status(400).json({ message: "Giỏ hàng trống" });
+    if (!["mock", "cod"].includes(paymentMethod)) {
+      return res
+        .status(400)
+        .json({ message: "Phương thức thanh toán không hợp lệ" });
+    }
 
-  const pending = await Order.findOne({
-    userId,
-    status: "pending",
-    isDeleted: false,
-  });
-  if (pending)
-    return res.status(400).json({ message: "Bạn đang có đơn chưa xử lý" });
+    const cart = await Cart.findOne({ userId });
+    if (!cart || cart.items.length === 0) {
+      return res.status(400).json({ message: "Giỏ hàng trống" });
+    }
 
-  let totalAmount = 0;
-  const items = [];
+    
+    if (paymentMethod === "cod") {
+      const pending = await Order.findOne({
+        userId,
+        status: "pending",
+        isDeleted: false,
+      });
+      if (pending) {
+        return res
+          .status(400)
+          .json({ message: "Bạn đang có đơn COD chưa xử lý" });
+      }
+    }
 
-  for (const item of cart.items) {
-    const product = await Product.findById(item.product);
-    if (!product || product.stock === 0)
-      return res.status(400).json({ message: "Sản phẩm không hợp lệ" });
+    let totalAmount = 0;
+    const items = [];
 
-    items.push({
-      product: product._id,
-      name: product.name,
-      price: product.price,
-      quantity: item.quantity,
+    for (const item of cart.items) {
+      const product = await Product.findById(item.product);
+      if (!product || product.stock < item.quantity) {
+        return res.status(400).json({
+          message: `Sản phẩm ${product?.name || ""} không đủ tồn kho`,
+        });
+      }
+
+      
+      product.stock -= item.quantity;
+      await product.save();
+
+      items.push({
+        product: product._id,
+        name: product.name,
+        price: product.price,
+        quantity: item.quantity,
+      });
+
+      totalAmount += product.price * item.quantity;
+    }
+
+    const order = new Order({
+      userId,
+      items,
+      totalAmount,
+      paymentMethod,
+      status: paymentMethod === "mock" ? "completed" : "pending",
+      isPaid: paymentMethod === "mock",
+      paidAt: paymentMethod === "mock" ? new Date() : null,
     });
 
-    totalAmount += product.price * item.quantity;
+    await order.save();
+    await Cart.deleteOne({ userId });
+
+    res.status(201).json({
+      message: "✅ Tạo đơn hàng thành công",
+      order,
+    });
+  } catch (err) {
+    console.error("CREATE ORDER ERROR:", err);
+    res.status(500).json({ message: "Lỗi server" });
   }
-
-  const order = new Order({ userId, items, totalAmount });
-  await order.save();
-  await Cart.deleteOne({ userId });
-
-  res.status(201).json({ message: "Tạo đơn thành công", order });
 };
+
 
 export const getOrdersByUser = async (req, res) => {
   try {
@@ -90,71 +129,53 @@ export const getOrderById = async (req, res) => {
   }
 };
 
-/**
- * ❌ USER – Huỷ đơn hàng (SOFT DELETE)
- */
 export const cancelOrderByUser = async (req, res) => {
   try {
     const orderId = req.params.id;
     const userId = req.user.id;
 
     const order = await Order.findById(orderId);
-    if (!order || order.isDeleted) {
-      return res.status(404).json({
-        message: "Không tìm thấy đơn hàng",
-      });
+    if (!order) {
+      return res.status(404).json({ message: "Không tìm thấy đơn hàng" });
     }
 
     if (order.userId.toString() !== userId) {
-      return res.status(403).json({
-        message: "Không có quyền huỷ đơn này",
-      });
+      return res.status(403).json({ message: "Không có quyền huỷ đơn này" });
     }
 
     if (order.status === "completed") {
-      return res.status(400).json({
-        message: "Không thể huỷ đơn đã hoàn tất",
-      });
+      return res.status(400).json({ message: "Không thể huỷ đơn đã hoàn tất" });
     }
 
     order.status = "cancelled";
-    order.isDeleted = true;
-    order.deletedAt = new Date();
-
     await order.save();
 
-    res.status(200).json({
+    res.json({
       message: "❌ Đã huỷ đơn hàng",
       order,
     });
-  } catch (error) {
-    console.error("Lỗi cancelOrderByUser:", error);
+  } catch (err) {
+    console.error("CANCEL ORDER ERROR:", err);
     res.status(500).json({ message: "Lỗi server" });
   }
 };
 
-/**
- * 👑 ADMIN – Lấy toàn bộ đơn hàng
- */
 export const getAllOrders = async (req, res) => {
   try {
     const orders = await Order.find({ isDeleted: false })
-      .populate("userId", "username email role")
-      .sort({ createdAt: -1 });
-
+      .populate("userId", "name email")
+      .populate("items.product", "name price image")
+      .sort({ createdAt: -1 }); 
     res.status(200).json({
-      message: "Admin lấy toàn bộ đơn hàng",
       orders,
+      total: orders.length,
     });
-  } catch (error) {
-    console.error("Lỗi getAllOrders:", error);
+  } catch (err) {
+    console.error("GET ALL ORDERS ERROR:", err);
     res.status(500).json({ message: "Lỗi server" });
   }
 };
 
-/**
- * 👑 ADMIN – Cập nhật trạng thái đơn hàng
- */
 export const updateOrderStatus = async (req, res) => {
   try {
     const { status } = req.body;
@@ -192,3 +213,36 @@ export const updateOrderStatus = async (req, res) => {
     res.status(500).json({ message: "Lỗi server" });
   }
 };
+
+export const confirmCOD = async (req, res) => {
+  try {
+    const order = await Order.findById(req.params.id);
+
+    if (!order) {
+      return res.status(404).json({ message: "Không tìm thấy đơn hàng" });
+    }
+
+    if (order.paymentMethod !== "cod") {
+      return res.status(400).json({ message: "Đơn hàng không phải COD" });
+    }
+
+    if (order.isPaid) {
+      return res.status(400).json({ message: "Đơn hàng đã được xác nhận" });
+    }
+
+    order.isPaid = true;
+    order.paidAt = new Date();
+    order.status = "completed";
+
+    await order.save();
+
+    res.json({
+      message: "✅ Đã xác nhận thanh toán COD",
+      order,
+    });
+  } catch (err) {
+    console.error("CONFIRM COD ERROR:", err);
+    res.status(500).json({ message: "Lỗi server" });
+  }
+};
+

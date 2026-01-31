@@ -1,40 +1,50 @@
-import { useEffect, useState } from "react";
-import { getAllProducts } from "../services/productService";
+import { useEffect, useState, useContext } from "react";
+import { CartContext } from "../context/CartContext";
 import ProductCard from "../components/ProductCard";
+import { getAllProducts } from "../services/productService";
+import { AuthContext } from "../context/AuthContext";
+import "./Home.css";
 
-const Home = () => {
+export default function Home() {
   const [products, setProducts] = useState([]);
+  const { addToCart } = useContext(CartContext);
+  const { token } = useContext(AuthContext);
 
   useEffect(() => {
     const fetchProducts = async () => {
-      const res = await getAllProducts();
-      setProducts(res);
+      try {
+        const data = await getAllProducts();
+        console.log("API DATA:", data);
+
+        setProducts(Array.isArray(data) ? data : data.products || []);
+      } catch (err) {
+        console.error(err);
+        setProducts([]);
+      }
     };
+
     fetchProducts();
   }, []);
 
-  return (
-    <div style={styles.container}>
-      <h2>Thiết bị viễn thông</h2>
+  const handleAddToCart = (product) => {
+    if (!token) {
+      alert("Vui lòng đăng nhập để thêm vào giỏ");
+      return;
+    }
 
-      <div style={styles.grid}>
+    addToCart(product._id, 1);
+  };
+
+
+  return (
+    <div className="home-container">
+      <h2 className="section-title">Thiết bị bán chạy</h2>
+
+      <div className="product-grid">
         {products.map((p) => (
-          <ProductCard key={p._id} product={p} />
+          <ProductCard key={p._id} product={p} onAddToCart={handleAddToCart} />
         ))}
       </div>
     </div>
   );
-};
-
-const styles = {
-  container: {
-    padding: "20px",
-  },
-  grid: {
-    display: "flex",
-    flexWrap: "wrap",
-    gap: "16px",
-  },
-};
-
-export default Home;
+}

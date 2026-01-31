@@ -1,17 +1,46 @@
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import User from "../model/User.js";
+import Cart from "../model/Cart.js";
 
 const genToken = (payload, exp) =>
   jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: exp });
 
 export const register = async (req, res) => {
-  const { username, email, password } = req.body;
-  const hash = await bcrypt.hash(password, 10);
+  try {
+    const { name, email, password } = req.body;
 
-  const user = await User.create({ username, email, password: hash });
-  res.status(201).json(user);
+    if (!name || !email || !password) {
+      return res.status(400).json({ message: "Thiếu thông tin đăng ký" });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const user = await User.create({
+      name,
+      email,
+      password: hashedPassword,
+    });
+
+    res.status(201).json({
+      message: "Đăng ký thành công",
+      user: {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+      },
+    });
+  } catch (err) {
+    
+    if (err.code === 11000) {
+      return res.status(400).json({ message: "Email đã được sử dụng" });
+    }
+
+    console.error("REGISTER ERROR:", err);
+    res.status(500).json({ message: "Lỗi server" });
+  }
 };
+
 
 export const login = async (req, res) => {
   const { email, password } = req.body;
@@ -47,6 +76,17 @@ export const refreshToken = async (req, res) => {
 };
 
 export const logout = async (req, res) => {
+  const userId = req.user.id;
+
+  await Cart.findOneAndDelete({ userId });
+
+  await Order.deleteMany({
+    userId,
+    status: "pending",
+    isPaid: false,
+  });
+
   res.clearCookie("refreshToken");
-  res.json({ message: "Đã logout" });
+  res.json({ message: "Đã đăng xuất" });
 };
+

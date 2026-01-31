@@ -52,7 +52,6 @@ export const payOrder = async (id, method, token) => {
 };
 
 
-// 👑 ADMIN
 export const getAllOrders = async (token) => {
   const res = await fetch(API_URL, {
     headers: {

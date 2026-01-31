@@ -13,7 +13,7 @@ export const login = async (data) => {
   const res = await fetch(`${API_URL}/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    credentials: "include", // để nhận refreshToken cookie
+    credentials: "include", 
     body: JSON.stringify(data),
   });
   return res.json();
@@ -36,7 +36,7 @@ export const logout = async () => {
 };
 
 export const getMe = async (token) => {
-  const res = await fetch(`http://localhost:5000/api/users/me`, {
+  const res = await fetch("http://localhost:5000/api/users/me", {
     headers: {
       Authorization: `Bearer ${token}`,
     },

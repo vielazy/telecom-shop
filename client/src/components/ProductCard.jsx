@@ -1,29 +1,32 @@
-import { Link } from "react-router-dom";
+import { FaCartPlus } from "react-icons/fa";
+import { useNavigate } from "react-router-dom";
 
-const ProductCard = ({ product }) => {
+export default function ProductCard({ product, onAddToCart }) {
+  const navigate = useNavigate();
+
   return (
-    <div style={styles.card}>
-      <img src={product.image} alt={product.name} style={styles.image} />
+    <div
+      className="product-card"
+      onClick={() => navigate(`/products/${product._id}`)}
+      style={{ cursor: "pointer" }}
+    >
+      <img src={product.image} alt={product.name} />
 
-      <h3>{product.name}</h3>
-      <p>{product.price.toLocaleString()} ₫</p>
+      <button
+        className="add-to-cart-btn"
+        onClick={(e) => {
+          e.stopPropagation();
+          onAddToCart(product);
+        }}
+      >
+        <FaCartPlus />
+      </button>
 
-      <Link to={`/products/${product._id}`}>Xem chi tiết</Link>
+      <div className="product-name">{product.name}</div>
+
+      <div className="product-price">
+        {Number(product.price).toLocaleString()} ₫
+      </div>
     </div>
   );
-};
-
-const styles = {
-  card: {
-    border: "1px solid #ddd",
-    padding: "16px",
-    width: "220px",
-  },
-  image: {
-    width: "100%",
-    height: "140px",
-    objectFit: "cover",
-  },
-};
-
-export default ProductCard;
+}
